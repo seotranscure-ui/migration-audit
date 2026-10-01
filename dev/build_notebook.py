@@ -67,6 +67,8 @@ https://transcure.net/
 '''
 
 ENGINE = r'''#@title ③ Audit engine — just run this cell, no edits needed { display-mode: "form" }
+if "LIVE_BASE" not in globals():
+    raise SystemExit("Please run cell ① Settings first (or use Runtime → Run all).")
 import re, json, html as htmllib, time, difflib, posixpath, threading, datetime, io
 from urllib.parse import urlsplit, urlunsplit, urljoin, unquote
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -757,6 +759,10 @@ print(f"Engine ready. Live: {LIVE_HOST}  |  Staging: {STAGE_HOST}")
 '''
 
 RUN = r'''#@title ④ Run the audit { display-mode: "form" }
+_needed = {"LIVE_BASE": "① Settings", "URL_SOURCE": "② URL list", "run_audit": "③ Audit engine"}
+_missing = [cell for var, cell in _needed.items() if var not in globals()]
+if _missing:
+    raise SystemExit("Please run these cells first (or use Runtime → Run all): " + ", ".join(_missing))
 if URL_SOURCE.startswith("Sitemap"):
     rows = [(u, None) for u in sitemap_urls(SITEMAP_URL or None)]
     if not rows:
@@ -795,6 +801,8 @@ display(styler.set_caption("Pages with the most issues (top 25)"))
 '''
 
 EXPORT = r'''#@title ⑤ Download Excel report { display-mode: "form" }
+if "details_df" not in globals():
+    raise SystemExit("No results yet — run cell ④ Run the audit first (or use Runtime → Run all).")
 report = f"seo_migration_audit_{datetime.datetime.now():%Y-%m-%d_%H%M}.xlsx"
 export_excel(report, overview, summary_df, details_df, images_df)
 print(f"Saved {report}")
