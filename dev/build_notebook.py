@@ -707,51 +707,63 @@ def run_audit(pairs):
     return overview, summary_df, details_df, images_df
 
 
-def export_excel(path, overview, summary_df, details_df, images_df):
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.formatting.rule import CellIsRule
+def summary_view(summary_df):
+    """The page table exactly as shown in the notebook: worst pages first, # = page number."""
+    return summary_df.sort_values(["FAIL", "WARN"], ascending=False, kind="stable").rename_axis("#")
+
+
+STATUS_COLORS = {"FAIL": "F8D7DA", "WARN": "FFF3CD", "PASS": "D4EDDA",
+                 "NO": "F8D7DA", "NOT FOUND": "F8D7DA", "YES": "D4EDDA"}
+
+
+def export_excel(path, overview, summary_df, details_df, images_df, summary_only=False):
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
     clip = lambda df: df.map(lambda v: v[:32000] if isinstance(v, str) else v) if hasattr(df, "map") else df.applymap(lambda v: v[:32000] if isinstance(v, str) else v)
-    issues = details_df[details_df["status"] != "PASS"]
-    sheets = [("Overview", overview), ("Summary", summary_df), ("All issues", issues)]
-    for c in CHECKS:
-        part = issues[issues["check"] == c]
-        if len(part):
-            sheets.append((c[:31], part.drop(columns=["check"])))
-    sheets += [("Images", images_df), ("All details", details_df)]
+    sheets = [("Summary", summary_view(summary_df).reset_index())]
+    if not summary_only:
+        issues = details_df[details_df["status"] != "PASS"]
+        sheets += [("Overview", overview), ("All issues", issues)]
+        for c in CHECKS:
+            part = issues[issues["check"] == c]
+            if len(part):
+                sheets.append((c[:31], part.drop(columns=["check"])))
+        sheets += [("Images", images_df), ("All details", details_df)]
 
-    red = PatternFill("solid", start_color="F8D7DA")
-    amber = PatternFill("solid", start_color="FFF3CD")
-    green = PatternFill("solid", start_color="D4EDDA")
-    header = PatternFill("solid", start_color="1F3A5F")
-    widths = {"live_url": 45, "stage_url": 45, "page_live": 45, "page_stage": 45, "live": 50, "stage": 50,
-              "note": 60, "live_src": 50, "stage_src": 50, "live_alt": 35, "stage_alt": 35, "check": 22}
+    fills = {k: PatternFill("solid", start_color=v) for k, v in STATUS_COLORS.items()}
+    header_fill = PatternFill("solid", start_color="F2F2F2")
+    thin = Border(bottom=Side(style="thin", color="BFBFBF"))
+    widths = {"#": 6, "live_url": 55, "stage_url": 55, "page_live": 45, "page_stage": 45, "live": 50, "stage": 50,
+              "note": 60, "live_src": 50, "stage_src": 50, "live_alt": 35, "stage_alt": 35, "check": 22,
+              "stage_status": 10, "FAIL": 7, "WARN": 7}
 
     with pd.ExcelWriter(path, engine="openpyxl") as xw:
         for name, df in sheets:
             clip(df).to_excel(xw, sheet_name=name, index=False)
             ws = xw.sheets[name]
-            ws.freeze_panes = "A2" if name == "Overview" else "C2" if name == "Summary" else "B2"
+            ws.freeze_panes = "D2" if name == "Summary" else "B2"
             if ws.max_row > 1:
                 ws.auto_filter.ref = ws.dimensions
+            ws.row_dimensions[1].height = 32
             for i, col in enumerate(df.columns, 1):
                 cell = ws.cell(row=1, column=i)
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = header
-                cell.alignment = Alignment(wrap_text=True, vertical="center")
-                ws.column_dimensions[get_column_letter(i)].width = widths.get(col, 14 if name == "Summary" else 18)
-            if ws.max_row > 1:
-                rng = f"A2:{get_column_letter(ws.max_column)}{ws.max_row}"
-                ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"FAIL"'], fill=red))
-                ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"WARN"'], fill=amber))
-                ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"PASS"'], fill=green))
-                ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"NO"'], fill=red))
-                ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"NOT FOUND"'], fill=red))
-                if name not in ("Overview", "Summary"):
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.font = Font(bold=True)
+                cell.fill = header_fill
+                cell.border = thin
+                cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+                ws.column_dimensions[get_column_letter(i)].width = widths.get(col, 12 if name == "Summary" else 18)
+            wrap = name != "Summary"
+            for row in ws.iter_rows(min_row=2):
+                for cell in row:
+                    fill = fills.get(cell.value) if isinstance(cell.value, str) else None
+                    if fill:
+                        cell.fill = fill
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    elif wrap:
+                        cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    else:
+                        cell.alignment = Alignment(vertical="center")
     return path
 
 
@@ -795,16 +807,24 @@ def _color(v):
             "PASS": "background-color:#d4edda"}.get(v, "")
 
 display(overview.style.set_caption("Pages per check"))
-worst = summary_df.sort_values(["FAIL", "WARN"], ascending=False).head(25)
+worst = summary_view(summary_df).head(25)
 styler = worst.style.map(_color) if hasattr(worst.style, "map") else worst.style.applymap(_color)
 display(styler.set_caption("Pages with the most issues (top 25)"))
 '''
 
-EXPORT = r'''#@title ⑤ Download Excel report { display-mode: "form" }
+EXPORT = r'''#@title ⑤ Download report { display-mode: "form" }
+EXPORT_FORMAT = "Excel: Summary + detail sheets"  #@param ["Excel: Summary + detail sheets", "Excel: Summary only", "CSV: Summary only"]
+#@markdown The **Summary** sheet is the same table shown above (all pages, worst first, same colours).
 if "details_df" not in globals():
     raise SystemExit("No results yet — run cell ④ Run the audit first (or use Runtime → Run all).")
-report = f"seo_migration_audit_{datetime.datetime.now():%Y-%m-%d_%H%M}.xlsx"
-export_excel(report, overview, summary_df, details_df, images_df)
+stamp = f"{datetime.datetime.now():%Y-%m-%d_%H%M}"
+if EXPORT_FORMAT.startswith("CSV"):
+    report = f"seo_migration_audit_summary_{stamp}.csv"
+    summary_view(summary_df).to_csv(report, encoding="utf-8-sig")
+else:
+    report = f"seo_migration_audit_{stamp}.xlsx"
+    export_excel(report, overview, summary_df, details_df, images_df,
+                 summary_only=EXPORT_FORMAT.endswith("only"))
 print(f"Saved {report}")
 try:
     from google.colab import files

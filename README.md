@@ -25,7 +25,8 @@ go to <https://colab.research.google.com> → **File → Upload notebook** → p
    - *Sitemap of live site* (auto-detected from `robots.txt` / `sitemap_index.xml`)
    - *Paste URLs* — one per line; add `, new-staging-url` for pages whose URL changed
    - *Upload CSV* — columns `live_url`, `stage_url` (optional)
-3. **Runtime → Run all.** Cell ④ shows a summary; cell ⑤ downloads the Excel report.
+3. **Runtime → Run all.** Cell ④ shows a summary; cell ⑤ downloads the report — choose
+   *Summary + detail sheets*, *Summary only* (Excel), or *Summary only* (CSV).
 
 Nothing to install: Colab already has every library the notebook uses.
 
@@ -33,8 +34,8 @@ Nothing to install: Colab already has every library the notebook uses.
 
 | Sheet | Contents |
 |---|---|
+| Summary | Same table as shown in the notebook: every page, worst first, `#` = page number, coloured PASS/WARN/FAIL |
 | Overview | FAIL / WARN / PASS counts per check |
-| Summary | One row per page, one coloured column per check |
 | All issues | Every FAIL/WARN with live value, staging value and what's wrong |
 | *one sheet per check* | Same, filtered to that check (e.g. only *Meta title* issues) |
 | Images | Every image pair: live vs staging src, alt, name/alt/path match |
